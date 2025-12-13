@@ -1,0 +1,25 @@
+{
+  "watchDirectory": "./",
+  "scheduleTime": "23:12",
+  "stockConfigs": [
+    {
+      "keywords": ["spx"],
+      "webhookUrl": "https://discord.com/api/webhooks/1448958219002314893/FC5b_cvhTjTCIu239A-wUKsDuePmNMzQlM6L1hXY_zhMwAj_ILhEqIlgnd6M-G-pJzuv",
+      "stockName": "SPX",
+      "stockCode": "SPX"
+    },
+    {
+      "keywords": ["tsm"],
+      "webhookUrl": "https://discord.com/api/webhooks/1448958219002314893/FC5b_cvhTjTCIu239A-wUKsDuePmNMzQlM6L1hXY_zhMwAj_ILhEqIlgnd6M-G-pJzuv",
+      "stockName": "TSM",
+      "stockCode": "TSM"
+    }
+  ],
+  "deepseek": {
+    "apiKey": "sk-2ce6b40ea56e437d939a5d122ba9c756",
+    "baseUrl": "https://api.deepseek.com/v1/chat/completions",
+    "model": "deepseek-chat"
+  },
+  "historyFile": "./history.json"
+}
+

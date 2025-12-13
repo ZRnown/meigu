@@ -1,0 +1,17 @@
+{
+	"name": "web3analyze",
+	"version": "1.0.0",
+	"description": "Plotly图表转图片并自动发送到Discord",
+	"main": "index.js",
+	"scripts": {
+		"start": "node index.js",
+		"run-now": "node index.js --run-now"
+	},
+	"dependencies": {
+		"puppeteer": "^24.33.0",
+		"puppeteer-core": "^24.33.0",
+		"node-cron": "^3.0.3",
+		"axios": "^1.6.5",
+		"form-data": "^4.0.0"
+	}
+}
