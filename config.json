@@ -1,5 +1,6 @@
 {
   "watchDirectory": "./",
+  "imageOutputDirectory": "./images",
   "scheduleTime": "23:12",
   "stockConfigs": [
     {

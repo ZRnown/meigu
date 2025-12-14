@@ -110,8 +110,9 @@ async function processHtmlFile(fileInfo, config, historyManager) {
   try {
     console.log(`\n📄 处理文件: ${path.basename(htmlFile)}`);
 
-    // 1. 转换为图片
-    const imagePaths = await convertHtmlToImages(htmlFile);
+    // 1. 转换为图片（使用配置的输出目录）
+    const outputDir = config.imageOutputDirectory || "./";
+    const imagePaths = await convertHtmlToImages(htmlFile, outputDir);
     if (imagePaths.length === 0) {
       console.warn(`⚠️  未生成图片: ${htmlFile}`);
       return;

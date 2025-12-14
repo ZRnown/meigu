@@ -1,5 +1,6 @@
 node_modules/
 *.png
+images/
 history.json
 .env
 .DS_Store

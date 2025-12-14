@@ -5,13 +5,21 @@ const puppeteer = require("puppeteer-core");
 /**
  * 将HTML文件中的Plotly图导出为图片
  * @param {string} htmlPath - HTML文件路径
+ * @param {string} outputDirectory - 图片输出目录（可选，默认为当前目录）
  * @returns {Promise<string[]>} 返回生成的图片文件路径数组
  */
-async function convertHtmlToImages(htmlPath) {
+async function convertHtmlToImages(htmlPath, outputDirectory = "./") {
   const absPath = path.resolve(htmlPath);
   const fileUrl = "file://" + absPath;
   const baseName = path.basename(absPath, path.extname(absPath));
   const outputImages = [];
+
+  // 确保输出目录存在
+  const outputDir = path.resolve(outputDirectory);
+  if (!fs.existsSync(outputDir)) {
+    fs.mkdirSync(outputDir, { recursive: true });
+    console.log(`📁 创建输出目录: ${outputDir}`);
+  }
 
   const browser = await puppeteer.launch({
     headless: "new",
@@ -47,10 +55,10 @@ async function convertHtmlToImages(htmlPath) {
         
         const base64 = dataUrl.replace(/^data:image\/png;base64,/, "");
         const pngName = `${baseName}_${id}.png`;
-        const pngPath = path.resolve(pngName);
+        const pngPath = path.join(outputDir, pngName);
         fs.writeFileSync(pngPath, base64, "base64");
         outputImages.push(pngPath);
-        console.log(`✓ 导出成功：${pngName}`);
+        console.log(`✓ 导出成功：${pngPath}`);
       } catch (error) {
         console.error(`✗ 导出失败 ${id}:`, error.message);
       }

@@ -5,7 +5,8 @@
 	"main": "index.js",
 	"scripts": {
 		"start": "node index.js",
-		"run-now": "node index.js --run-now"
+		"run-now": "node index.js --run-now",
+		"test-ai": "node test-ai.js"
 	},
 	"dependencies": {
 		"puppeteer": "^24.33.0",
