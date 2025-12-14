@@ -2,23 +2,41 @@ const axios = require("axios");
 const fs = require("fs");
 
 /**
- * 调用Gemini API分析图片
+ * 调用Gemini API分析图片和tvcode数据
  * @param {string} apiKey - Gemini API密钥
  * @param {string} baseUrl - API基础URL
  * @param {string} model - 模型名称
  * @param {Object} stock - 股票信息 {name, code}
- * @param {string[]} imagePaths - 图片路径数组
+ * @param {string[]} imagePaths - 图片路径数组（gamma图表）
  * @param {string[]} timeLabels - 时间标签数组
+ * @param {Array} tvcodeDataList - tvcode数据数组 [{date, data}, ...]
+ * @param {string} customPrompt - 自定义提示词
  * @returns {Promise<string>} 分析结果
  */
-async function analyzeWithGemini(apiKey, baseUrl, model, stock, imagePaths, timeLabels) {
-  const prompt = `你是一位资深的量化交易专家和期权分析师，擅长分析 Gamma Hedging 图表的时间序列变化。
+async function analyzeWithGemini(apiKey, baseUrl, model, stock, imagePaths, timeLabels, tvcodeDataList = [], customPrompt = "") {
+  // 构建tvcode数据文本
+  let tvcodeText = "";
+  if (tvcodeDataList.length > 0) {
+    tvcodeText = "\n\n**Tvcode数据**:\n";
+    for (const item of tvcodeDataList) {
+      tvcodeText += `\n日期 ${item.date}:\n${item.data}\n`;
+    }
+  }
 
-我给你 ${stock.name} (${stock.code}) 最近 ${imagePaths.length} 份按时间顺序排列的 Gamma Hedging 图表：
+  // 构建完整的提示词
+  let prompt;
+  if (customPrompt) {
+    // 使用自定义提示词
+    prompt = `${customPrompt}\n\n**股票**: ${stock.name} (${stock.code})\n**时间顺序**: ${timeLabels.join(", ")}${tvcodeText}`;
+  } else {
+    // 使用默认提示词
+    prompt = `你是一位资深的量化交易专家和期权分析师，擅长分析 Gamma Hedging 图表的时间序列变化。
 
-**时间顺序**: ${timeLabels.join(", ")}
+我给你 ${stock.name} (${stock.code}) 最近 ${timeLabels.length} 个日期按时间顺序排列的数据：
 
-请深入分析这些图表的**历史演变趋势**，并基于趋势做出预测：
+**时间顺序**: ${timeLabels.join(", ")}${tvcodeText}
+
+请深入分析这些数据的**历史演变趋势**，并基于趋势做出预测：
 
 ## 📊 一、历史趋势分析
 
@@ -129,6 +147,7 @@ async function analyzeWithGemini(apiKey, baseUrl, model, stock, imagePaths, time
 5. 逻辑清晰，结论明确
 
 6. 基于数据说话，避免模糊表述`;
+  }
 
   // 构建 Gemini API 的请求内容
   // Gemini 使用 parts 数组，每个 part 可以是 text 或 inline_data (图片)

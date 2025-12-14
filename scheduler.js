@@ -5,6 +5,7 @@ const { convertHtmlToImages } = require("./convert");
 const { sendImagesToDiscord, sendMessageToDiscord } = require("./discord");
 const { analyzeWithGemini } = require("./gemini");
 const { HistoryManager } = require("./history");
+const { extractTvcodeData, isTvcodeFile, isGammaFile } = require("./tvcode");
 
 /**
  * 从文件名提取日期
@@ -75,21 +76,29 @@ function scanHtmlFiles(watchDirectory, stockConfigs, historyManager) {
       continue;
     }
 
-    // 步骤4：使用第一个关键词作为股票标识（用于分组）
+    // 步骤4：判断文件类型（tvcode或gamma）
+    const fileType = isTvcodeFile(htmlFile) ? "tvcode" : (isGammaFile(htmlFile) ? "gamma" : "unknown");
+    if (fileType === "unknown") {
+      console.log(`⚠️  无法识别文件类型（非tvcode也非gamma），跳过: ${htmlFile}`);
+      continue;
+    }
+
+    // 步骤5：使用第一个关键词作为股票标识（用于分组）
     const stockKey = stockConfig.keywords[0];
     const htmlPath = path.resolve(watchDirectory, htmlFile);
 
-    // 步骤5：检查是否已处理（避免重复处理）
-    if (historyManager.isProcessed(stockKey, htmlPath)) {
+    // 步骤6：检查是否已处理（避免重复处理）
+    if (historyManager.isProcessed(stockKey, htmlPath, fileType)) {
       console.log(`⏭️  跳过已处理文件: ${htmlFile}`);
       continue;
     }
 
-    // 步骤6：添加到待处理列表
+    // 步骤7：添加到待处理列表
     toProcess.push({
       htmlFile: htmlPath,
       stockConfig,
-      stockKey
+      stockKey,
+      fileType
     });
   }
 
@@ -103,30 +112,45 @@ function scanHtmlFiles(watchDirectory, stockConfigs, historyManager) {
  * @param {HistoryManager} historyManager - 历史记录管理器
  */
 async function processHtmlFile(fileInfo, config, historyManager) {
-  const { htmlFile, stockConfig, stockKey } = fileInfo;
+  const { htmlFile, stockConfig, stockKey, fileType } = fileInfo;
   const date = extractDateFromFilename(path.basename(htmlFile)) || 
                new Date().toISOString().split("T")[0];
 
   try {
-    console.log(`\n📄 处理文件: ${path.basename(htmlFile)}`);
+    console.log(`\n📄 处理文件: ${path.basename(htmlFile)} (类型: ${fileType})`);
 
-    // 1. 转换为图片（使用配置的输出目录）
-    const outputDir = config.imageOutputDirectory || "./";
-    const imagePaths = await convertHtmlToImages(htmlFile, outputDir);
-    if (imagePaths.length === 0) {
-      console.warn(`⚠️  未生成图片: ${htmlFile}`);
-      return;
+    if (fileType === "gamma") {
+      // Gamma文件：转换为图片
+      const outputDir = config.imageOutputDirectory || "./";
+      const imagePaths = await convertHtmlToImages(htmlFile, outputDir);
+      if (imagePaths.length === 0) {
+        console.warn(`⚠️  未生成图片: ${htmlFile}`);
+        return;
+      }
+
+      // 发送到Discord
+      await sendImagesToDiscord(
+        stockConfig.webhookUrl,
+        imagePaths,
+        `📊 ${stockConfig.stockName} Gamma Hedging 图表 - ${date}`
+      );
+
+      // 记录历史
+      historyManager.recordProcessed(stockKey, htmlFile, imagePaths, date, fileType);
+    } else if (fileType === "tvcode") {
+      // Tvcode文件：提取文本数据
+      const tvcodeData = await extractTvcodeData(htmlFile);
+      console.log(`✓ 提取tvcode数据: ${tvcodeData.substring(0, 100)}...`);
+
+      // 发送到Discord（作为文本消息）
+      await sendMessageToDiscord(
+        stockConfig.webhookUrl,
+        `📊 ${stockConfig.stockName} TVCode 数据 - ${date}\n\`\`\`\n${tvcodeData}\n\`\`\``
+      );
+
+      // 记录历史（tvcode没有图片，只有数据）
+      historyManager.recordProcessed(stockKey, htmlFile, [], date, fileType, tvcodeData);
     }
-
-    // 2. 发送到Discord
-    await sendImagesToDiscord(
-      stockConfig.webhookUrl,
-      imagePaths,
-      `📊 ${stockConfig.stockName} Gamma Hedging 图表 - ${date}`
-    );
-
-    // 3. 记录历史（按股票分组，确保不会混合不同股票的数据）
-    historyManager.recordProcessed(stockKey, htmlFile, imagePaths, date);
 
     // 4. 检查是否需要AI分析（从第二次有数据开始）
     // 
@@ -137,56 +161,72 @@ async function processHtmlFile(fileInfo, config, historyManager) {
     // - 重要：使用 stockKey 确保只获取同一股票的历史数据，不会混合不同股票
     const recentHistory = historyManager.getRecentRecords(stockKey, 2);
     
-    // 触发条件：该股票至少有 2 条历史数据
+    // 触发条件：该股票至少有 2 个日期的数据
     if (recentHistory.length >= 2) {
-      console.log(`\n🤖 开始AI分析: ${stockConfig.stockName} (${stockKey}, 最近${recentHistory.length}天)`);
+      console.log(`\n🤖 开始AI分析: ${stockConfig.stockName} (${stockKey}, 最近${recentHistory.length}个日期)`);
 
-      // 收集最近2天的图片（确保都是同一股票的）
+      // 收集最近2个日期的gamma图片和tvcode数据
       const recentImages = [];
+      const tvcodeDataList = [];
       const timeLabels = [];
-      const seenImages = new Set(); // 用于去重，避免发送相同的图片
+      const seenImages = new Set(); // 用于去重
 
       for (const record of recentHistory) {
-        // 验证：确保所有记录都是同一股票（通过 stockKey 已经保证）
-        // 检查图片文件是否存在，并去重
-        for (const imagePath of record.imagePaths) {
-          if (!fs.existsSync(imagePath)) {
-            console.warn(`⚠️  图片文件不存在，跳过: ${imagePath}`);
-            continue;
+        // 收集gamma图片
+        if (record.gamma && record.gamma.imagePaths) {
+          for (const imagePath of record.gamma.imagePaths) {
+            if (!fs.existsSync(imagePath)) {
+              console.warn(`⚠️  图片文件不存在，跳过: ${imagePath}`);
+              continue;
+            }
+            
+            if (seenImages.has(imagePath)) {
+              console.warn(`⚠️  检测到重复图片，跳过: ${imagePath}`);
+              continue;
+            }
+            
+            seenImages.add(imagePath);
+            recentImages.push(imagePath);
           }
-          
-          // 去重：如果图片路径已存在，跳过
-          if (seenImages.has(imagePath)) {
-            console.warn(`⚠️  检测到重复图片，跳过: ${imagePath}`);
-            continue;
-          }
-          
-          seenImages.add(imagePath);
-          recentImages.push(imagePath);
         }
+
+        // 收集tvcode数据
+        if (record.tvcode && record.tvcode.data) {
+          tvcodeDataList.push({
+            date: record.date,
+            data: record.tvcode.data
+          });
+        }
+
         timeLabels.push(record.date);
       }
 
-      // 确保每个日期至少有一张图片
-      if (recentImages.length < recentHistory.length) {
-        console.warn(`⚠️  警告: 收集到的图片数量 (${recentImages.length}) 少于日期数量 (${recentHistory.length})`);
+      // 验证数据完整性
+      const hasGamma = recentImages.length > 0;
+      const hasTvcode = tvcodeDataList.length > 0;
+
+      if (!hasGamma && !hasTvcode) {
+        console.warn(`⚠️  警告: ${stockConfig.stockName} 没有可用的数据（gamma或tvcode）`);
+        return;
       }
 
-      console.log(`  📊 分析图片数量: ${recentImages.length}, 时间范围: ${timeLabels.join(" → ")}`);
-      console.log(`  📁 图片文件: ${recentImages.map(p => path.basename(p)).join(", ")}`);
+      console.log(`  📊 Gamma图片数量: ${recentImages.length}`);
+      console.log(`  📝 Tvcode数据数量: ${tvcodeDataList.length}`);
+      console.log(`  📅 时间范围: ${timeLabels.join(" → ")}`);
 
-      // 调用Gemini分析
-      // stockName 和 stockCode 用于在 AI 提示词中显示股票信息
+      // 调用Gemini分析（传入图片和tvcode数据）
       const analysis = await analyzeWithGemini(
         config.gemini.apiKey,
         config.gemini.baseUrl,
         config.gemini.model,
         {
-          name: stockConfig.stockName,  // 用于显示：如 "SPX"
-          code: stockConfig.stockCode    // 用于显示：如 "SPX"（可以是代码）
+          name: stockConfig.stockName,
+          code: stockConfig.stockCode
         },
         recentImages,
-        timeLabels
+        timeLabels,
+        tvcodeDataList,
+        config.gemini.prompt || "根据tvcode和gamma的变化，用最简短的文字推演今天的走势。"
       );
 
       // 发送分析结果到Discord
