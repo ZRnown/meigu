@@ -1,10 +1,9 @@
 const axios = require("axios");
 const fs = require("fs");
-const FormData = require("form-data");
 
 /**
- * 调用DeepSeek API分析图片
- * @param {string} apiKey - DeepSeek API密钥
+ * 调用Gemini API分析图片
+ * @param {string} apiKey - Gemini API密钥
  * @param {string} baseUrl - API基础URL
  * @param {string} model - 模型名称
  * @param {Object} stock - 股票信息 {name, code}
@@ -12,7 +11,7 @@ const FormData = require("form-data");
  * @param {string[]} timeLabels - 时间标签数组
  * @returns {Promise<string>} 分析结果
  */
-async function analyzeWithDeepSeek(apiKey, baseUrl, model, stock, imagePaths, timeLabels) {
+async function analyzeWithGemini(apiKey, baseUrl, model, stock, imagePaths, timeLabels) {
   const prompt = `你是一位资深的量化交易专家和期权分析师，擅长分析 Gamma Hedging 图表的时间序列变化。
 
 我给你 ${stock.name} (${stock.code}) 最近 ${imagePaths.length} 份按时间顺序排列的 Gamma Hedging 图表：
@@ -131,52 +130,58 @@ async function analyzeWithDeepSeek(apiKey, baseUrl, model, stock, imagePaths, ti
 
 6. 基于数据说话，避免模糊表述`;
 
-  // 构建消息内容，包含图片
-  const messages = [
-    {
-      role: "user",
-      content: [
-        { type: "text", text: prompt }
-      ]
-    }
+  // 构建 Gemini API 的请求内容
+  // Gemini 使用 parts 数组，每个 part 可以是 text 或 inline_data (图片)
+  const parts = [
+    { text: prompt }
   ];
 
-  // 添加图片（如果API支持图片输入）
-  // 注意：DeepSeek API可能需要base64编码的图片
+  // 添加图片（Gemini 使用 inline_data 格式）
   for (const imagePath of imagePaths) {
     const imageBuffer = fs.readFileSync(imagePath);
     const base64Image = imageBuffer.toString("base64");
-    messages[0].content.push({
-      type: "image_url",
-      image_url: {
-        url: `data:image/png;base64,${base64Image}`
+    const mimeType = imagePath.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg';
+    
+    parts.push({
+      inline_data: {
+        mime_type: mimeType,
+        data: base64Image
       }
     });
   }
 
   try {
+    // Gemini API URL 格式: https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={apiKey}
+    const url = `${baseUrl}/${model}:generateContent?key=${apiKey}`;
+    
     const response = await axios.post(
-      baseUrl,
+      url,
       {
-        model: model,
-        messages: messages,
-        temperature: 0.7,
-        max_tokens: 4000
+        contents: [
+          {
+            parts: parts
+          }
+        ],
+        generationConfig: {
+          temperature: 0.7,
+          maxOutputTokens: 4000
+        }
       },
       {
         headers: {
-          "Authorization": `Bearer ${apiKey}`,
           "Content-Type": "application/json"
         }
       }
     );
 
-    return response.data.choices[0].message.content;
+    // Gemini API 响应格式
+    const text = response.data.candidates[0].content.parts[0].text;
+    return text;
   } catch (error) {
-    console.error("DeepSeek API 调用失败:", error.response?.data || error.message);
+    console.error("Gemini API 调用失败:", error.response?.data || error.message);
     throw error;
   }
 }
 
-module.exports = { analyzeWithDeepSeek };
+module.exports = { analyzeWithGemini };
 

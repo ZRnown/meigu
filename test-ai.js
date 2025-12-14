@@ -1,7 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const { HistoryManager } = require("./history");
-const { analyzeWithDeepSeek } = require("./deepseek");
+const { analyzeWithGemini } = require("./gemini");
 const { sendMessageToDiscord } = require("./discord");
 
 /**
@@ -27,8 +27,8 @@ if (!fs.existsSync(configPath)) {
 const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
 
 // 验证配置
-if (!config.deepseek.apiKey) {
-  console.error("❌ 请在 config.json 中配置 DeepSeek API key");
+if (!config.gemini || !config.gemini.apiKey) {
+  console.error("❌ 请在 config.json 中配置 Gemini API key");
   process.exit(1);
 }
 
@@ -107,22 +107,28 @@ async function testAIAnalysis() {
     console.log(`   数据范围: ${recentHistory.map(r => r.date).join(" → ")}`);
 
     try {
-      // 收集最近2天的图片
+      // 收集最近2天的图片（去重，确保每张图片只发送一次）
       const recentImages = [];
       const timeLabels = [];
+      const seenImages = new Set(); // 用于去重
 
       for (const record of recentHistory) {
-        // 检查图片文件是否存在
-        const existingImages = record.imagePaths.filter(imgPath => 
-          fs.existsSync(imgPath)
-        );
+        // 检查图片文件是否存在，并去重
+        for (const imagePath of record.imagePaths) {
+          if (!fs.existsSync(imagePath)) {
+            console.warn(`⚠️  警告: ${record.date} 的图片文件不存在: ${imagePath}`);
+            continue;
+          }
 
-        if (existingImages.length === 0) {
-          console.warn(`⚠️  警告: ${record.date} 的图片文件不存在，跳过`);
-          continue;
+          // 去重：如果图片路径已存在，跳过
+          if (seenImages.has(imagePath)) {
+            console.warn(`⚠️  检测到重复图片，跳过: ${path.basename(imagePath)}`);
+            continue;
+          }
+
+          seenImages.add(imagePath);
+          recentImages.push(imagePath);
         }
-
-        recentImages.push(...existingImages);
         timeLabels.push(record.date);
       }
 
@@ -131,13 +137,20 @@ async function testAIAnalysis() {
         continue;
       }
 
-      console.log(`  📊 分析图片数量: ${recentImages.length}, 时间范围: ${timeLabels.join(" → ")}`);
+      // 确保每个日期至少有一张不同的图片
+      if (recentImages.length < recentHistory.length) {
+        console.warn(`⚠️  警告: 收集到的图片数量 (${recentImages.length}) 少于日期数量 (${recentHistory.length})`);
+        console.warn(`   这可能导致AI无法进行有效的历史趋势分析`);
+      }
 
-      // 调用DeepSeek分析
-      const analysis = await analyzeWithDeepSeek(
-        config.deepseek.apiKey,
-        config.deepseek.baseUrl,
-        config.deepseek.model,
+      console.log(`  📊 分析图片数量: ${recentImages.length}, 时间范围: ${timeLabels.join(" → ")}`);
+      console.log(`  📁 图片文件: ${recentImages.map(p => path.basename(p)).join(", ")}`);
+
+      // 调用Gemini分析
+      const analysis = await analyzeWithGemini(
+        config.gemini.apiKey,
+        config.gemini.baseUrl,
+        config.gemini.model,
         {
           name: stockConfig.stockName,
           code: stockConfig.stockCode
@@ -149,7 +162,7 @@ async function testAIAnalysis() {
       // 发送分析结果到Discord
       await sendMessageToDiscord(
         stockConfig.webhookUrl,
-        `## 🤖 ${stockConfig.stockName} AI分析报告（测试模式）\n\n${analysis}`
+        `## 🤖 ${stockConfig.stockName} AI分析报告\n\n${analysis}`
       );
 
       console.log(`✅ ${stockConfig.stockName} AI分析完成并已发送到Discord`);

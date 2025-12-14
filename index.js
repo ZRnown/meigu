@@ -20,8 +20,8 @@ if (missingWebhooks.length > 0) {
   process.exit(1);
 }
 
-if (!config.deepseek.apiKey) {
-  console.error("❌ 请在 config.json 中配置 DeepSeek API key");
+if (!config.gemini || !config.gemini.apiKey) {
+  console.error("❌ 请在 config.json 中配置 Gemini API key");
   process.exit(1);
 }
 

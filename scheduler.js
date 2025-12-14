@@ -3,7 +3,7 @@ const fs = require("fs");
 const path = require("path");
 const { convertHtmlToImages } = require("./convert");
 const { sendImagesToDiscord, sendMessageToDiscord } = require("./discord");
-const { analyzeWithDeepSeek } = require("./deepseek");
+const { analyzeWithGemini } = require("./gemini");
 const { HistoryManager } = require("./history");
 
 /**
@@ -143,21 +143,43 @@ async function processHtmlFile(fileInfo, config, historyManager) {
       // 收集最近2天的图片（确保都是同一股票的）
       const recentImages = [];
       const timeLabels = [];
+      const seenImages = new Set(); // 用于去重，避免发送相同的图片
 
       for (const record of recentHistory) {
         // 验证：确保所有记录都是同一股票（通过 stockKey 已经保证）
-        recentImages.push(...record.imagePaths);
+        // 检查图片文件是否存在，并去重
+        for (const imagePath of record.imagePaths) {
+          if (!fs.existsSync(imagePath)) {
+            console.warn(`⚠️  图片文件不存在，跳过: ${imagePath}`);
+            continue;
+          }
+          
+          // 去重：如果图片路径已存在，跳过
+          if (seenImages.has(imagePath)) {
+            console.warn(`⚠️  检测到重复图片，跳过: ${imagePath}`);
+            continue;
+          }
+          
+          seenImages.add(imagePath);
+          recentImages.push(imagePath);
+        }
         timeLabels.push(record.date);
       }
 
-      console.log(`  📊 分析图片数量: ${recentImages.length}, 时间范围: ${timeLabels.join(" → ")}`);
+      // 确保每个日期至少有一张图片
+      if (recentImages.length < recentHistory.length) {
+        console.warn(`⚠️  警告: 收集到的图片数量 (${recentImages.length}) 少于日期数量 (${recentHistory.length})`);
+      }
 
-      // 调用DeepSeek分析
+      console.log(`  📊 分析图片数量: ${recentImages.length}, 时间范围: ${timeLabels.join(" → ")}`);
+      console.log(`  📁 图片文件: ${recentImages.map(p => path.basename(p)).join(", ")}`);
+
+      // 调用Gemini分析
       // stockName 和 stockCode 用于在 AI 提示词中显示股票信息
-      const analysis = await analyzeWithDeepSeek(
-        config.deepseek.apiKey,
-        config.deepseek.baseUrl,
-        config.deepseek.model,
+      const analysis = await analyzeWithGemini(
+        config.gemini.apiKey,
+        config.gemini.baseUrl,
+        config.gemini.model,
         {
           name: stockConfig.stockName,  // 用于显示：如 "SPX"
           code: stockConfig.stockCode    // 用于显示：如 "SPX"（可以是代码）
