@@ -4,4 +4,4 @@ images/
 history.json
 .env
 .DS_Store
-
+config.json
