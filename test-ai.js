@@ -96,7 +96,7 @@ async function testAIAnalysis() {
   // 现在为每个股票执行AI分析
   for (const stockConfig of config.stockConfigs) {
     const stockKey = stockConfig.keywords[0];
-    const recentHistory = historyManager.getRecentHistory(stockKey, 2);
+    const recentHistory = historyManager.getRecentRecords(stockKey, 2);
 
     if (recentHistory.length < 2) {
       console.log(`⚠️  ${stockConfig.stockName} (${stockKey}) 只有 ${recentHistory.length} 天的数据，跳过分析`);

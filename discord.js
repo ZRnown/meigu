@@ -89,6 +89,12 @@ function splitMessage(text, maxLength = 1900) {
     messages.push(currentMessage.trim());
   }
 
+  // 验证：确保所有内容都被包含
+  const totalLength = messages.reduce((sum, msg) => sum + msg.length, 0);
+  if (totalLength < text.length * 0.95) { // 允许5%的差异（换行符等）
+    console.warn(`⚠️  警告: 分割后的总长度 (${totalLength}) 明显少于原始长度 (${text.length})`);
+  }
+
   return messages;
 }
 
@@ -124,6 +130,7 @@ async function sendMessageToDiscord(webhookUrl, message) {
       const totalParts = messageParts.length;
 
       console.log(`📝 消息过长 (${message.length} 字符)，分割成 ${totalParts} 条发送`);
+      console.log(`   各部分长度: ${messageParts.map((p, idx) => `第${idx+1}部分=${p.length}`).join(", ")}`);
 
       for (let i = 0; i < messageParts.length; i++) {
         const partNumber = i + 1;
@@ -149,12 +156,36 @@ async function sendMessageToDiscord(webhookUrl, message) {
           }, {
             headers: {
               "Content-Type": "application/json"
-            }
+            },
+            timeout: 30000 // 30秒超时
           });
 
           console.log(`✓ 已发送第 ${partNumber}/${totalParts} 条消息 (${partMessage.length} 字符)`);
+          
+          // 验证响应
+          if (!response.data) {
+            console.warn(`⚠️  第 ${partNumber} 条消息可能未成功发送（无响应数据）`);
+          }
         } catch (error) {
           console.error(`❌ 发送第 ${partNumber}/${totalParts} 条消息失败:`, error.response?.data || error.message);
+          // 如果是超时或网络错误，等待更长时间后重试一次
+          if (error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT') {
+            console.log(`⏳ 等待3秒后重试第 ${partNumber} 条消息...`);
+            await new Promise(resolve => setTimeout(resolve, 3000));
+            try {
+              const retryResponse = await axios.post(webhookUrl, {
+                content: partMessage
+              }, {
+                headers: {
+                  "Content-Type": "application/json"
+                },
+                timeout: 30000
+              });
+              console.log(`✓ 重试成功: 第 ${partNumber}/${totalParts} 条消息`);
+            } catch (retryError) {
+              console.error(`❌ 重试失败: 第 ${partNumber} 条消息`, retryError.message);
+            }
+          }
           // 继续发送下一条，不中断整个流程
         }
       }

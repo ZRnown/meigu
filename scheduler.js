@@ -128,15 +128,16 @@ async function processHtmlFile(fileInfo, config, historyManager) {
     // 3. 记录历史（按股票分组，确保不会混合不同股票的数据）
     historyManager.recordProcessed(stockKey, htmlFile, imagePaths, date);
 
-    // 4. 检查是否需要AI分析（从第二天开始）
+    // 4. 检查是否需要AI分析（从第二次有数据开始）
     // 
     // 逻辑说明：
-    // - 第一天：只有 1 天数据，不执行分析
-    // - 第二天开始：有 2 天数据，执行分析
+    // - 第一次：只有 1 条数据，不执行分析
+    // - 第二次开始：有 2 条数据，执行分析
+    // - 使用 getRecentRecords 获取最近2条记录（跳过周末，只获取有数据的日期）
     // - 重要：使用 stockKey 确保只获取同一股票的历史数据，不会混合不同股票
-    const recentHistory = historyManager.getRecentHistory(stockKey, 2);
+    const recentHistory = historyManager.getRecentRecords(stockKey, 2);
     
-    // 触发条件：该股票至少有 2 天的历史数据
+    // 触发条件：该股票至少有 2 条历史数据
     if (recentHistory.length >= 2) {
       console.log(`\n🤖 开始AI分析: ${stockConfig.stockName} (${stockKey}, 最近${recentHistory.length}天)`);
 

@@ -61,7 +61,7 @@ class HistoryManager {
   }
 
   /**
-   * 获取指定股票的历史记录
+   * 获取指定股票的历史记录（按天数）
    * @param {string} stockKey - 股票标识
    * @param {number} days - 获取最近几天的记录
    * @returns {Array}
@@ -73,6 +73,22 @@ class HistoryManager {
 
     const records = this.history[stockKey];
     return records.slice(-days);
+  }
+
+  /**
+   * 获取指定股票的最近N条记录（跳过周末，获取最近两次有数据的日期）
+   * @param {string} stockKey - 股票标识
+   * @param {number} count - 获取最近几条记录（默认2条）
+   * @returns {Array}
+   */
+  getRecentRecords(stockKey, count = 2) {
+    if (!this.history[stockKey]) {
+      return [];
+    }
+
+    const records = this.history[stockKey];
+    // 直接返回最后N条记录（已经按日期排序）
+    return records.slice(-count);
   }
 
   /**
