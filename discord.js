@@ -54,30 +54,37 @@ function splitMessage(text, maxLength = 1900) {
   const lines = text.split("\n");
 
   for (const line of lines) {
+    const lineWithNewline = line + "\n";
+    
     // 如果当前行加上新行会超过限制
-    if (currentMessage.length + line.length + 1 > maxLength) {
+    if (currentMessage.length + lineWithNewline.length > maxLength) {
+      // 保存当前消息（如果有内容）
       if (currentMessage.trim()) {
         messages.push(currentMessage.trim());
         currentMessage = "";
       }
       
-      // 如果单行就超过限制，强制分割
+      // 如果单行就超过限制，强制按字符分割
       if (line.length > maxLength) {
-        // 按字符分割
         let remaining = line;
         while (remaining.length > maxLength) {
           messages.push(remaining.substring(0, maxLength));
           remaining = remaining.substring(maxLength);
         }
-        currentMessage = remaining;
+        if (remaining.length > 0) {
+          currentMessage = remaining + "\n";
+        }
       } else {
-        currentMessage = line + "\n";
+        // 单行不超过限制，直接添加
+        currentMessage = lineWithNewline;
       }
     } else {
-      currentMessage += line + "\n";
+      // 可以添加到当前消息
+      currentMessage += lineWithNewline;
     }
   }
 
+  // 添加最后的消息
   if (currentMessage.trim()) {
     messages.push(currentMessage.trim());
   }
@@ -110,31 +117,46 @@ async function sendMessageToDiscord(webhookUrl, message) {
       return response.data;
     } else {
       // 消息太长，需要分割
-      const messageParts = splitMessage(message, maxLength);
+      // 考虑到页码标记的长度，实际内容需要更短
+      const pageHeaderLength = 30; // "**第 X/Y 部分**\n\n" 大约30字符
+      const actualMaxLength = maxLength - pageHeaderLength;
+      const messageParts = splitMessage(message, actualMaxLength);
       const totalParts = messageParts.length;
 
-      console.log(`📝 消息过长，分割成 ${totalParts} 条发送`);
+      console.log(`📝 消息过长 (${message.length} 字符)，分割成 ${totalParts} 条发送`);
 
       for (let i = 0; i < messageParts.length; i++) {
         const partNumber = i + 1;
-        const partMessage = totalParts > 1 
+        let partMessage = totalParts > 1 
           ? `**第 ${partNumber}/${totalParts} 部分**\n\n${messageParts[i]}`
           : messageParts[i];
+
+        // 验证消息长度
+        if (partMessage.length > 2000) {
+          console.error(`❌ 错误: 第 ${partNumber} 条消息仍然超过限制 (${partMessage.length} 字符)`);
+          // 强制截断（不应该发生，但作为安全措施）
+          partMessage = partMessage.substring(0, 1997) + "...";
+        }
 
         // 添加延迟，避免发送过快
         if (i > 0) {
           await new Promise(resolve => setTimeout(resolve, 500));
         }
 
-        const response = await axios.post(webhookUrl, {
-          content: partMessage
-        }, {
-          headers: {
-            "Content-Type": "application/json"
-          }
-        });
+        try {
+          const response = await axios.post(webhookUrl, {
+            content: partMessage
+          }, {
+            headers: {
+              "Content-Type": "application/json"
+            }
+          });
 
-        console.log(`✓ 已发送第 ${partNumber}/${totalParts} 条消息`);
+          console.log(`✓ 已发送第 ${partNumber}/${totalParts} 条消息 (${partMessage.length} 字符)`);
+        } catch (error) {
+          console.error(`❌ 发送第 ${partNumber}/${totalParts} 条消息失败:`, error.response?.data || error.message);
+          // 继续发送下一条，不中断整个流程
+        }
       }
 
       console.log(`✅ 已发送全部 ${totalParts} 条消息到 Discord Webhook`);
