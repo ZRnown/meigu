@@ -128,14 +128,21 @@ async function processHtmlFile(fileInfo, config, historyManager) {
         return;
       }
 
+      // 发送到Discord
+      await sendImagesToDiscord(
+        stockConfig.webhookUrl,
+        imagePaths,
+        `📊 ${stockConfig.stockName} Gamma Hedging 图表 - ${date}`
+      );
+
       // 记录历史
       historyManager.recordProcessed(stockKey, htmlFile, imagePaths, date, fileType);
     } else if (fileType === "tvcode") {
-      // Tvcode文件：提取文本数据
+      // Tvcode文件：提取文本数据（仅用于AI分析，不发送到Discord）
       const tvcodeData = await extractTvcodeData(htmlFile);
       console.log(`✓ 提取tvcode数据: ${tvcodeData.substring(0, 100)}...`);
 
-      // 记录历史（tvcode没有图片，只有数据）
+      // 记录历史（tvcode没有图片，只有数据，用于后续AI分析）
       historyManager.recordProcessed(stockKey, htmlFile, [], date, fileType, tvcodeData);
     }
 
