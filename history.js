@@ -17,7 +17,32 @@ class HistoryManager {
     try {
       if (fs.existsSync(this.historyFile)) {
         const data = fs.readFileSync(this.historyFile, "utf8");
-        return JSON.parse(data);
+        const rawHistory = JSON.parse(data);
+
+        // 转换旧格式（数组）到新格式（对象）
+        const convertedHistory = {};
+        for (const [stockKey, records] of Object.entries(rawHistory)) {
+          if (Array.isArray(records)) {
+            // 旧格式：数组转换为对象格式
+            convertedHistory[stockKey] = {};
+            for (const record of records) {
+              convertedHistory[stockKey][record.date] = {
+                date: record.date,
+                gamma: record.imagePaths ? {
+                  htmlFile: record.htmlFile,
+                  imagePaths: record.imagePaths
+                } : null,
+                tvcode: null, // 旧格式没有tvcode
+                processedAt: record.processedAt
+              };
+            }
+          } else {
+            // 已经是新格式
+            convertedHistory[stockKey] = records;
+          }
+        }
+
+        return convertedHistory;
       }
     } catch (error) {
       console.warn("加载历史记录失败，将创建新记录:", error.message);

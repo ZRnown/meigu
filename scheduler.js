@@ -128,13 +128,6 @@ async function processHtmlFile(fileInfo, config, historyManager) {
         return;
       }
 
-      // 发送到Discord
-      await sendImagesToDiscord(
-        stockConfig.webhookUrl,
-        imagePaths,
-        `📊 ${stockConfig.stockName} Gamma Hedging 图表 - ${date}`
-      );
-
       // 记录历史
       historyManager.recordProcessed(stockKey, htmlFile, imagePaths, date, fileType);
     } else if (fileType === "tvcode") {
@@ -142,28 +135,32 @@ async function processHtmlFile(fileInfo, config, historyManager) {
       const tvcodeData = await extractTvcodeData(htmlFile);
       console.log(`✓ 提取tvcode数据: ${tvcodeData.substring(0, 100)}...`);
 
-      // 发送到Discord（作为文本消息）
-      await sendMessageToDiscord(
-        stockConfig.webhookUrl,
-        `📊 ${stockConfig.stockName} TVCode 数据 - ${date}\n\`\`\`\n${tvcodeData}\n\`\`\``
-      );
-
       // 记录历史（tvcode没有图片，只有数据）
       historyManager.recordProcessed(stockKey, htmlFile, [], date, fileType, tvcodeData);
     }
 
-    // 4. 检查是否需要AI分析（从第二次有数据开始）
-    // 
-    // 逻辑说明：
-    // - 第一次：只有 1 条数据，不执行分析
-    // - 第二次开始：有 2 条数据，执行分析
-    // - 使用 getRecentRecords 获取最近2条记录（跳过周末，只获取有数据的日期）
-    // - 重要：使用 stockKey 确保只获取同一股票的历史数据，不会混合不同股票
+
+    console.log(`✓ 处理完成: ${path.basename(htmlFile)}`);
+  } catch (error) {
+    console.error(`✗ 处理失败 ${htmlFile}:`, error.message);
+  }
+}
+
+/**
+ * 执行AI分析并发送到统一频道
+ * @param {Object} config - 配置对象
+ * @param {HistoryManager} historyManager - 历史记录管理器
+ */
+async function performUnifiedAIAnalysis(config, historyManager) {
+  console.log(`\n🤖 开始统一AI分析...`);
+
+  for (const stockConfig of config.stockConfigs) {
+    const stockKey = stockConfig.keywords[0];
     const recentHistory = historyManager.getRecentRecords(stockKey, 2);
-    
-    // 触发条件：该股票至少有 2 个日期的数据
+
+    // 只有当有至少2天的数据时才进行分析
     if (recentHistory.length >= 2) {
-      console.log(`\n🤖 开始AI分析: ${stockConfig.stockName} (${stockKey}, 最近${recentHistory.length}个日期)`);
+      console.log(`📊 分析股票: ${stockConfig.stockName} (${stockKey}, 最近${recentHistory.length}个日期)`);
 
       // 收集最近2个日期的gamma图片和tvcode数据
       const recentImages = [];
@@ -179,12 +176,12 @@ async function processHtmlFile(fileInfo, config, historyManager) {
               console.warn(`⚠️  图片文件不存在，跳过: ${imagePath}`);
               continue;
             }
-            
+
             if (seenImages.has(imagePath)) {
               console.warn(`⚠️  检测到重复图片，跳过: ${imagePath}`);
               continue;
             }
-            
+
             seenImages.add(imagePath);
             recentImages.push(imagePath);
           }
@@ -207,38 +204,44 @@ async function processHtmlFile(fileInfo, config, historyManager) {
 
       if (!hasGamma && !hasTvcode) {
         console.warn(`⚠️  警告: ${stockConfig.stockName} 没有可用的数据（gamma或tvcode）`);
-        return;
+        continue;
       }
 
       console.log(`  📊 Gamma图片数量: ${recentImages.length}`);
       console.log(`  📝 Tvcode数据数量: ${tvcodeDataList.length}`);
       console.log(`  📅 时间范围: ${timeLabels.join(" → ")}`);
 
-      // 调用Gemini分析（传入图片和tvcode数据）
-      const analysis = await analyzeWithGemini(
-        config.gemini.apiKey,
-        config.gemini.baseUrl,
-        config.gemini.model,
-        {
-          name: stockConfig.stockName,
-          code: stockConfig.stockCode
-        },
-        recentImages,
-        timeLabels,
-        tvcodeDataList,
-        config.gemini.prompt || "根据tvcode和gamma的变化，用最简短的文字推演今天的走势。"
-      );
+      try {
+        // 调用Gemini分析
+        const analysis = await analyzeWithGemini(
+          config.gemini.apiKey,
+          config.gemini.baseUrl,
+          config.gemini.model,
+          {
+            name: stockConfig.stockName,
+            code: stockConfig.stockCode
+          },
+          recentImages,
+          timeLabels,
+          tvcodeDataList,
+          config.gemini.prompt || "根据tvcode和gamma的变化，用最简短的文字推演今天的走势。"
+        );
 
-      // 发送分析结果到Discord
-      await sendMessageToDiscord(
-        stockConfig.webhookUrl,
-        `## 🤖 ${stockConfig.stockName} AI分析报告\n\n${analysis}`
-      );
+        // 发送分析结果到统一频道（如果配置了）
+        const aiWebhookUrl = config.aiAnalysisWebhookUrl;
+        if (aiWebhookUrl) {
+          await sendMessageToDiscord(
+            aiWebhookUrl,
+            `## ${stockConfig.stockName} 分析报告\n\n${analysis}`
+          );
+          console.log(`✓ ${stockConfig.stockName} 分析结果已发送到统一频道`);
+        } else {
+          console.log(`⚠️ 未配置AI分析统一频道，跳过发送`);
+        }
+      } catch (error) {
+        console.error(`❌ ${stockConfig.stockName} AI分析失败:`, error.message);
+      }
     }
-
-    console.log(`✓ 处理完成: ${path.basename(htmlFile)}`);
-  } catch (error) {
-    console.error(`✗ 处理失败 ${htmlFile}:`, error.message);
   }
 }
 
@@ -269,6 +272,9 @@ async function runScheduledTask(config) {
   for (const fileInfo of filesToProcess) {
     await processHtmlFile(fileInfo, config, historyManager);
   }
+
+  // 统一执行AI分析
+  await performUnifiedAIAnalysis(config, historyManager);
 
   console.log(`\n✅ 定时任务完成`);
 }

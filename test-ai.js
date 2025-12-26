@@ -204,7 +204,7 @@ async function testAIAnalysis() {
       // 4. 发送分析结果到Discord
       await sendMessageToDiscord(
         stockConfig.webhookUrl,
-        `## 🤖 ${stockConfig.stockName} AI分析报告\n\n${analysis}`
+        `## ${stockConfig.stockName} 分析报告\n\n${analysis}`
       );
       
       console.log(`✅ ${stockConfig.stockName} AI分析完成并已发送到Discord`);
