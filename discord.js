@@ -3,6 +3,25 @@ const FormData = require("form-data");
 const fs = require("fs");
 
 /**
+ * 验证Discord Webhook URL是否有效
+ * @param {string} webhookUrl - Discord Webhook URL
+ * @returns {Promise<boolean>} 是否有效
+ */
+async function validateWebhookUrl(webhookUrl) {
+  try {
+    // 发送一个简单的HEAD请求来验证URL
+    const response = await axios.head(webhookUrl, { timeout: 5000 });
+    return response.status === 200;
+  } catch (error) {
+    console.warn(`⚠️  Webhook URL验证失败: ${webhookUrl}`);
+    console.warn(`   错误: ${error.message}`);
+    console.warn(`   将继续尝试发送消息...`);
+    // 不抛出错误，继续尝试发送，这样不会中断整个流程
+    return true;
+  }
+}
+
+/**
  * 发送图片到Discord Webhook
  * @param {string} webhookUrl - Discord Webhook URL
  * @param {string[]} imagePaths - 图片文件路径数组
@@ -10,6 +29,12 @@ const fs = require("fs");
  */
 async function sendImagesToDiscord(webhookUrl, imagePaths, message = "") {
   try {
+    // 验证webhook URL
+    const isValidUrl = await validateWebhookUrl(webhookUrl);
+    if (!isValidUrl) {
+      throw new Error(`无效的webhook URL: ${webhookUrl}`);
+    }
+
     // Discord Webhook 支持通过 multipart/form-data 发送文件
     const formData = new FormData();
     
@@ -19,11 +44,25 @@ async function sendImagesToDiscord(webhookUrl, imagePaths, message = "") {
     // 添加图片文件（Discord Webhook 支持 files[] 数组）
     for (let i = 0; i < imagePaths.length; i++) {
       const imagePath = imagePaths[i];
+
+      // 检查文件是否存在
+      if (!fs.existsSync(imagePath)) {
+        throw new Error(`图片文件不存在: ${imagePath}`);
+      }
+
+      // 检查文件大小（Discord限制8MB）
+      const stats = fs.statSync(imagePath);
+      if (stats.size > 8 * 1024 * 1024) {
+        throw new Error(`图片文件过大: ${imagePath} (${(stats.size / 1024 / 1024).toFixed(2)}MB)，Discord限制8MB`);
+      }
+
       const imageBuffer = fs.readFileSync(imagePath);
       formData.append(`files[${i}]`, imageBuffer, {
         filename: imagePath.split("/").pop(),
         contentType: "image/png"
       });
+
+      console.log(`   图片${i + 1}: ${imagePath.split("/").pop()} (${(stats.size / 1024).toFixed(1)}KB)`);
     }
 
     const response = await axios.post(webhookUrl, formData, {
@@ -33,7 +72,21 @@ async function sendImagesToDiscord(webhookUrl, imagePaths, message = "") {
     console.log(`✓ 已发送 ${imagePaths.length} 张图片到 Discord Webhook`);
     return response.data;
   } catch (error) {
-    console.error("Discord Webhook 发送失败:", error.response?.data || error.message);
+    console.error("❌ Discord Webhook 发送失败:");
+    console.error(`   URL: ${webhookUrl}`);
+    console.error(`   图片数量: ${imagePaths.length}`);
+    console.error(`   图片大小: ${imagePaths.map(p => `${p.split('/').pop()}: ${fs.statSync(p).size} bytes`).join(', ')}`);
+
+    if (error.response) {
+      console.error(`   状态码: ${error.response.status}`);
+      console.error(`   响应:`, error.response.data);
+    } else if (error.code) {
+      console.error(`   错误代码: ${error.code}`);
+      console.error(`   错误信息: ${error.message}`);
+    } else {
+      console.error(`   错误: ${error.message}`);
+    }
+
     throw error;
   }
 }
@@ -106,6 +159,12 @@ function splitMessage(text, maxLength = 1900) {
  */
 async function sendMessageToDiscord(webhookUrl, message) {
   try {
+    // 验证webhook URL
+    const isValidUrl = await validateWebhookUrl(webhookUrl);
+    if (!isValidUrl) {
+      throw new Error(`无效的webhook URL: ${webhookUrl}`);
+    }
+
     // Discord 消息限制是 2000 字符，我们使用 1900 作为安全边距
     const maxLength = 1900;
     
@@ -194,13 +253,27 @@ async function sendMessageToDiscord(webhookUrl, message) {
       return { success: true, parts: totalParts };
     }
   } catch (error) {
-    console.error("Discord Webhook 发送失败:", error.response?.data || error.message);
+    console.error("❌ Discord Webhook 发送失败:");
+    console.error(`   URL: ${webhookUrl}`);
+    console.error(`   消息长度: ${message.length} 字符`);
+
+    if (error.response) {
+      console.error(`   状态码: ${error.response.status}`);
+      console.error(`   响应:`, error.response.data);
+    } else if (error.code) {
+      console.error(`   错误代码: ${error.code}`);
+      console.error(`   错误信息: ${error.message}`);
+    } else {
+      console.error(`   错误: ${error.message}`);
+    }
+
     throw error;
   }
 }
 
 module.exports = {
   sendImagesToDiscord,
-  sendMessageToDiscord
+  sendMessageToDiscord,
+  validateWebhookUrl
 };
 
