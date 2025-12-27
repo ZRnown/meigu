@@ -1,0 +1,72 @@
+{
+  "tsm": {
+    "2025-12-12": {
+      "date": "2025-12-12",
+      "gamma": {
+        "htmlFile": "/Users/wanghaixin/Development/DiscordBotWork/web3analyze/2025-12-12_03;32_tsm_gamma.html",
+        "imagePaths": [
+          "/Users/wanghaixin/Development/DiscordBotWork/web3analyze/2025-12-12_03;32_tsm_gamma_21b814fb-6063-41a8-b27c-a6d4031f9664.png"
+        ]
+      },
+      "tvcode": null,
+      "processedAt": "2025-12-13T15:06:25.615Z"
+    },
+    "2025-12-13": {
+      "date": "2025-12-13",
+      "gamma": {
+        "htmlFile": "/Users/wanghaixin/Development/DiscordBotWork/web3analyze/2025-12-13_03;32_tsm_gamma.html",
+        "imagePaths": [
+          "/Users/wanghaixin/Development/DiscordBotWork/web3analyze/images/2025-12-14_03;32_tsm_gamma_21b814fb-6063-41a8-b27c-a6d4031f9664.png"
+        ]
+      },
+      "tvcode": null,
+      "processedAt": "2025-12-14T05:05:22.776Z"
+    },
+    "2025-12-14": {
+      "date": "2025-12-14",
+      "gamma": {
+        "htmlFile": "/Users/wanghaixin/Development/DiscordBotWork/web3analyze/2025-12-14_03;32_tsm_gamma.html",
+        "imagePaths": [
+          "/Users/wanghaixin/Development/DiscordBotWork/web3analyze/images/2025-12-14_03;32_tsm_gamma_21b814fb-6063-41a8-b27c-a6d4031f9664.png"
+        ]
+      },
+      "tvcode": null,
+      "processedAt": "2025-12-14T05:04:26.330Z"
+    }
+  },
+  "spx": {
+    "2025-12-12": {
+      "date": "2025-12-12",
+      "gamma": {
+        "htmlFile": "/Users/wanghaixin/Development/DiscordBotWork/web3analyze/2025-12-12_03;34_SPX_gamma.html",
+        "imagePaths": [
+          "/Users/wanghaixin/Development/DiscordBotWork/web3analyze/2025-12-12_03;34_SPX_gamma_4e3d8e13-e871-44b7-a9ef-155bef7b8cbd.png"
+        ]
+      },
+      "tvcode": null,
+      "processedAt": "2025-12-13T15:06:50.133Z"
+    },
+    "2025-12-13": {
+      "date": "2025-12-13",
+      "gamma": {
+        "htmlFile": "/Users/wanghaixin/Development/DiscordBotWork/web3analyze/2025-12-13_03;34_SPX_gamma.html",
+        "imagePaths": [
+          "/Users/wanghaixin/Development/DiscordBotWork/web3analyze/images/2025-12-14_03;34_SPX_gamma_4e3d8e13-e871-44b7-a9ef-155bef7b8cbd.png"
+        ]
+      },
+      "tvcode": null,
+      "processedAt": "2025-12-14T05:05:22.780Z"
+    },
+    "2025-12-14": {
+      "date": "2025-12-14",
+      "gamma": {
+        "htmlFile": "/Users/wanghaixin/Development/DiscordBotWork/web3analyze/2025-12-14_03;34_SPX_gamma.html",
+        "imagePaths": [
+          "/Users/wanghaixin/Development/DiscordBotWork/web3analyze/images/2025-12-14_03;34_SPX_gamma_4e3d8e13-e871-44b7-a9ef-155bef7b8cbd.png"
+        ]
+      },
+      "tvcode": null,
+      "processedAt": "2025-12-14T05:04:42.086Z"
+    }
+  }
+}

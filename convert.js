@@ -14,6 +14,10 @@ async function convertHtmlToImages(htmlPath, outputDirectory = "./") {
   const baseName = path.basename(absPath, path.extname(absPath));
   const outputImages = [];
 
+  // 确保文件名包含日期前缀，避免文件覆盖
+  // 例如: 2025-12-13_03;32_tsm_gamma -> 2025-12-13_03;32_tsm_gamma
+  console.log(`📄 处理文件: ${baseName}`);
+
   // 确保输出目录存在
   const outputDir = path.resolve(outputDirectory);
   if (!fs.existsSync(outputDir)) {

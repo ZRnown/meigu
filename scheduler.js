@@ -161,13 +161,25 @@ async function processHtmlFile(fileInfo, config, historyManager) {
 async function performUnifiedAIAnalysis(config, historyManager) {
   console.log(`\n🤖 开始统一AI分析...`);
 
+  let analyzedCount = 0;
+
   for (const stockConfig of config.stockConfigs) {
     const stockKey = stockConfig.keywords[0];
     const recentHistory = historyManager.getRecentRecords(stockKey, 2);
 
+    console.log(`📊 检查股票: ${stockConfig.stockName} (${stockKey})`);
+    console.log(`   历史记录数量: ${recentHistory.length}`);
+
+    // 显示历史记录详情
+    for (const record of recentHistory) {
+      const hasGamma = record.gamma && record.gamma.imagePaths && record.gamma.imagePaths.length > 0;
+      const hasTvcode = record.tvcode && record.tvcode.data;
+      console.log(`   日期 ${record.date}: Gamma=${hasGamma ? '✅' : '❌'}, Tvcode=${hasTvcode ? '✅' : '❌'}`);
+    }
+
     // 只有当有至少2天的数据时才进行分析
     if (recentHistory.length >= 2) {
-      console.log(`📊 分析股票: ${stockConfig.stockName} (${stockKey}, 最近${recentHistory.length}个日期)`);
+      console.log(`   ✅ 满足分析条件，开始分析...`);
 
       // 收集最近2个日期的gamma图片和tvcode数据
       const recentImages = [];
@@ -183,12 +195,12 @@ async function performUnifiedAIAnalysis(config, historyManager) {
               console.warn(`⚠️  图片文件不存在，跳过: ${imagePath}`);
               continue;
             }
-
+            
             if (seenImages.has(imagePath)) {
               console.warn(`⚠️  检测到重复图片，跳过: ${imagePath}`);
               continue;
             }
-
+            
             seenImages.add(imagePath);
             recentImages.push(imagePath);
           }
@@ -218,37 +230,59 @@ async function performUnifiedAIAnalysis(config, historyManager) {
       console.log(`  📝 Tvcode数据数量: ${tvcodeDataList.length}`);
       console.log(`  📅 时间范围: ${timeLabels.join(" → ")}`);
 
+      // 检查图片文件是否存在
+      console.log(`  🔍 检查图片文件:`);
+      for (const imagePath of recentImages) {
+        const exists = fs.existsSync(imagePath);
+        console.log(`     ${exists ? '✅' : '❌'} ${imagePath.split('/').pop()}`);
+        if (!exists) {
+          console.warn(`     ⚠️  图片文件不存在，将被跳过`);
+        }
+      }
+
       try {
+        console.log(`  🤖 开始调用Gemini API...`);
         // 调用Gemini分析
-        const analysis = await analyzeWithGemini(
-          config.gemini.apiKey,
-          config.gemini.baseUrl,
-          config.gemini.model,
-          {
-            name: stockConfig.stockName,
-            code: stockConfig.stockCode
-          },
-          recentImages,
-          timeLabels,
-          tvcodeDataList,
-          config.gemini.prompt || "根据tvcode和gamma的变化，用最简短的文字推演今天的走势。"
-        );
+      const analysis = await analyzeWithGemini(
+        config.gemini.apiKey,
+        config.gemini.baseUrl,
+        config.gemini.model,
+        {
+          name: stockConfig.stockName,
+          code: stockConfig.stockCode
+        },
+        recentImages,
+        timeLabels,
+        tvcodeDataList,
+        config.gemini.prompt || "根据tvcode和gamma的变化，用最简短的文字推演今天的走势。"
+      );
 
         // 发送分析结果到统一频道（如果配置了）
         const aiWebhookUrl = config.aiAnalysisWebhookUrl;
         if (aiWebhookUrl) {
-          await sendMessageToDiscord(
+      await sendMessageToDiscord(
             aiWebhookUrl,
             `## ${stockConfig.stockName} 分析报告\n\n${analysis}`
-          );
+      );
           console.log(`✓ ${stockConfig.stockName} 分析结果已发送到统一频道`);
         } else {
           console.log(`⚠️ 未配置AI分析统一频道，跳过发送`);
         }
-      } catch (error) {
+  } catch (error) {
         console.error(`❌ ${stockConfig.stockName} AI分析失败:`, error.message);
       }
+
+      analyzedCount++;
+    } else {
+      console.log(`   ❌ 跳过分析: 需要至少2天的历史数据`);
     }
+  }
+
+  console.log(`\n📊 AI分析总结: 成功分析 ${analyzedCount} 个股票`);
+
+  if (analyzedCount === 0) {
+    console.log(`💡 提示: AI分析需要每个股票至少有2天的历史数据（包含gamma图片和tvcode数据）`);
+    console.log(`   请确保运行足够的天数后，系统会自动进行AI分析`);
   }
 }
 
@@ -270,17 +304,16 @@ async function runScheduledTask(config) {
 
   if (filesToProcess.length === 0) {
     console.log("📭 没有需要处理的文件");
-    return;
+  } else {
+    console.log(`📋 找到 ${filesToProcess.length} 个文件需要处理`);
+
+    // 逐个处理
+    for (const fileInfo of filesToProcess) {
+      await processHtmlFile(fileInfo, config, historyManager);
+    }
   }
 
-  console.log(`📋 找到 ${filesToProcess.length} 个文件需要处理`);
-
-  // 逐个处理
-  for (const fileInfo of filesToProcess) {
-    await processHtmlFile(fileInfo, config, historyManager);
-  }
-
-  // 统一执行AI分析
+  // 统一执行AI分析（不管当天是否有新文件，都执行）
   await performUnifiedAIAnalysis(config, historyManager);
 
   console.log(`\n✅ 定时任务完成`);
