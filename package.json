@@ -5,19 +5,17 @@
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
-    "run-now": "node index.js --run-now",
-    "run-upload-now": "node index.js --run-upload-now",
-    "run-ai-now": "node index.js --run-ai-now",
     "start-upload": "node index.js --upload-only",
     "start-ai": "node index.js --ai-only",
-    "test": "node --test tests/*.test.js",
-    "test-ai": "node test-ai.js"
+    "run-now": "node index.js --run-now",
+    "run-upload-now": "node index.js --run-upload-now",
+    "run-ai-now": "node index.js --run-ai-now"
   },
   "dependencies": {
-    "puppeteer": "^24.33.0",
-    "puppeteer-core": "^24.33.0",
-    "node-cron": "^3.0.3",
     "axios": "^1.6.5",
-    "form-data": "^4.0.0"
+    "form-data": "^4.0.0",
+    "node-cron": "^3.0.3",
+    "puppeteer": "^24.33.0",
+    "puppeteer-core": "^24.33.0"
   }
 }

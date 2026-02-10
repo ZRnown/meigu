@@ -189,9 +189,9 @@ async function runUploadTask(config) {
 function startUploadScheduler(config) {
   const cron = require("node-cron");
 
-  const scheduleTime = config.uploadScheduleTime || config.scheduleTime;
+  const scheduleTime = config.uploadScheduleTime;
   if (!scheduleTime) {
-    throw new Error("缺少 uploadScheduleTime（或兼容字段 scheduleTime）配置");
+    throw new Error("缺少 uploadScheduleTime 配置");
   }
 
   const [hour, minute] = scheduleTime.split(":").map(Number);

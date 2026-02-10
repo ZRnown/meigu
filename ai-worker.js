@@ -2,13 +2,14 @@ const fs = require("fs");
 const { HistoryManager } = require("./history");
 const { getStockKey } = require("./upload-worker");
 
+const ANALYSIS_SEPARATOR = "────────────────────────────────────────────────────────────────────────────────";
+
 function buildAnalysisInput(records, maxDays = 2) {
   const sortedRecords = [...records]
     .filter((record) => record && record.date)
     .sort((a, b) => a.date.localeCompare(b.date));
 
   const selectedRecords = sortedRecords.slice(-Math.max(1, maxDays));
-
   const recentImages = [];
   const tvcodeDataList = [];
   const timeLabels = [];
@@ -39,7 +40,6 @@ function buildAnalysisInput(records, maxDays = 2) {
   }
 
   return {
-    selectedRecords,
     recentImages,
     tvcodeDataList,
     timeLabels
@@ -97,14 +97,12 @@ async function runAIAnalysisTask(config) {
         input.recentImages,
         input.timeLabels,
         input.tvcodeDataList,
-        config.gemini.prompt || "根据tvcode和gamma的变化，用最简短的文字推演今天的走势。"
+        config.gemini.prompt
       );
 
       if (config.aiAnalysisWebhookUrl) {
-        await sendMessageToDiscord(
-          config.aiAnalysisWebhookUrl,
-          `## ${stockConfig.stockName} 分析报告\n\n${analysis}`
-        );
+        const content = `## ${stockConfig.stockName} 分析报告\n\n${analysis}\n\n${ANALYSIS_SEPARATOR}`;
+        await sendMessageToDiscord(config.aiAnalysisWebhookUrl, content);
         console.log(`   ✅ ${stockConfig.stockName} AI 分析已发送`);
       } else {
         console.log("   ⚠️  未配置 aiAnalysisWebhookUrl，跳过发送");
@@ -123,9 +121,9 @@ async function runAIAnalysisTask(config) {
 function startAIScheduler(config) {
   const cron = require("node-cron");
 
-  const scheduleTime = config.aiScheduleTime || config.scheduleTime;
+  const scheduleTime = config.aiScheduleTime;
   if (!scheduleTime) {
-    throw new Error("缺少 aiScheduleTime（或兼容字段 scheduleTime）配置");
+    throw new Error("缺少 aiScheduleTime 配置");
   }
 
   const [hour, minute] = scheduleTime.split(":").map(Number);
