@@ -108,12 +108,7 @@ class HistoryManager {
    * @returns {Array}
    */
   getRecentHistory(stockKey, days = 2) {
-    if (!this.history[stockKey]) {
-      return [];
-    }
-
-    const records = this.history[stockKey];
-    return records.slice(-days);
+    return this.getRecentRecords(stockKey, days);
   }
 
   /**
@@ -183,7 +178,7 @@ class HistoryManager {
       return null;
     }
 
-    return this.history[stockKey].find(record => record.date === date) || null;
+    return this.history[stockKey][date] || null;
   }
 }
 

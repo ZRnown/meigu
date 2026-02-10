@@ -1,18 +1,23 @@
 {
-	"name": "web3analyze",
-	"version": "1.0.0",
-	"description": "Plotly图表转图片并自动发送到Discord",
-	"main": "index.js",
-	"scripts": {
-		"start": "node index.js",
-		"run-now": "node index.js --run-now",
-		"test-ai": "node test-ai.js"
-	},
-	"dependencies": {
-		"puppeteer": "^24.33.0",
-		"puppeteer-core": "^24.33.0",
-		"node-cron": "^3.0.3",
-		"axios": "^1.6.5",
-		"form-data": "^4.0.0"
-	}
+  "name": "web3analyze",
+  "version": "1.0.0",
+  "description": "Plotly图表转图片并自动发送到Discord",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "run-now": "node index.js --run-now",
+    "run-upload-now": "node index.js --run-upload-now",
+    "run-ai-now": "node index.js --run-ai-now",
+    "start-upload": "node index.js --upload-only",
+    "start-ai": "node index.js --ai-only",
+    "test": "node --test tests/*.test.js",
+    "test-ai": "node test-ai.js"
+  },
+  "dependencies": {
+    "puppeteer": "^24.33.0",
+    "puppeteer-core": "^24.33.0",
+    "node-cron": "^3.0.3",
+    "axios": "^1.6.5",
+    "form-data": "^4.0.0"
+  }
 }

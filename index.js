@@ -1,56 +1,151 @@
 const fs = require("fs");
 const path = require("path");
-const { startScheduler, runScheduledTask } = require("./scheduler");
+const { startUploadScheduler, runUploadTask } = require("./upload-worker");
+const { startAIScheduler, runAIAnalysisTask } = require("./ai-worker");
 
-// 加载配置
 const configPath = path.resolve(__dirname, "config.json");
+
 if (!fs.existsSync(configPath)) {
   console.error("❌ 配置文件不存在: config.json");
-  console.log("请先创建 config.json 并配置相关参数");
   process.exit(1);
 }
 
-const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
-
-// 验证配置
-const missingWebhooks = config.stockConfigs.filter(c => !c.webhookUrl || c.webhookUrl.startsWith("YOUR_"));
-if (missingWebhooks.length > 0) {
-  console.error("❌ 请在 config.json 中配置所有股票的 Discord Webhook URL");
-  console.error(`   缺少配置的股票: ${missingWebhooks.map(c => c.keywords[0]).join(", ")}`);
-  process.exit(1);
+function loadConfig() {
+  return JSON.parse(fs.readFileSync(configPath, "utf8"));
 }
 
-if (!config.gemini || !config.gemini.apiKey) {
-  console.error("❌ 请在 config.json 中配置 Gemini API key");
-  process.exit(1);
+function isPlaceholderWebhook(url) {
+  return !url || String(url).startsWith("YOUR_");
 }
 
-// 主函数
-async function main() {
-  try {
-    // 检查命令行参数
-    const args = process.argv.slice(2);
-    if (args.includes("--run-now")) {
-      // 立即执行一次
-      console.log("🚀 立即执行任务...");
-      await runScheduledTask(config);
-    } else {
-      // 启动定时任务
-      startScheduler(config);
-      console.log("\n💡 提示: 使用 --run-now 参数可以立即执行一次任务");
-      console.log("按 Ctrl+C 退出\n");
-    }
-  } catch (error) {
-    console.error("❌ 启动失败:", error.message);
-    process.exit(1);
+function validateUploadConfig(config) {
+  const missingWebhooks = (config.stockConfigs || []).filter((stock) => isPlaceholderWebhook(stock.webhookUrl));
+  if (missingWebhooks.length > 0) {
+    const symbols = missingWebhooks.map((stock) => stock.stockCode || stock.keywords?.[0] || "unknown").join(", ");
+    throw new Error(`请在 config.json 中配置上传 webhook，缺少: ${symbols}`);
+  }
+
+  if (!config.watchDirectory) {
+    throw new Error("缺少 watchDirectory 配置");
+  }
+
+  if (!config.historyFile) {
+    throw new Error("缺少 historyFile 配置");
   }
 }
 
-// 处理退出信号
+function hasAIConfig(config) {
+  return Boolean(config.gemini?.apiKey && config.gemini?.baseUrl && config.gemini?.model);
+}
+
+function isExplicitAIRequest(args) {
+  return args.includes("--ai-only") || args.includes("--run-ai-now");
+}
+
+async function runNow(mode, config) {
+  if (mode === "upload") {
+    validateUploadConfig(config);
+    await runUploadTask(config);
+    return;
+  }
+
+  if (mode === "ai") {
+    if (!hasAIConfig(config)) {
+      throw new Error("缺少 Gemini 配置，无法执行 AI 分析");
+    }
+    await runAIAnalysisTask(config);
+    return;
+  }
+
+  validateUploadConfig(config);
+  await runUploadTask(config);
+
+  if (hasAIConfig(config)) {
+    await runAIAnalysisTask(config);
+  } else {
+    console.warn("⚠️  未配置 Gemini，已跳过 AI 分析");
+  }
+}
+
+async function main() {
+  const args = process.argv.slice(2);
+  const config = loadConfig();
+
+  const runUploadOnly = args.includes("--upload-only");
+  const runAIOnly = args.includes("--ai-only");
+  const runUploadNowFlag = args.includes("--run-upload-now");
+  const runAINowFlag = args.includes("--run-ai-now");
+  const runNowFlag = args.includes("--run-now");
+
+  if (runUploadOnly && runAIOnly) {
+    throw new Error("--upload-only 和 --ai-only 不能同时使用");
+  }
+
+  if (runUploadNowFlag && runAINowFlag) {
+    await runNow("both", config);
+    return;
+  }
+
+  if (runUploadNowFlag) {
+    await runNow("upload", config);
+    return;
+  }
+
+  if (runAINowFlag) {
+    await runNow("ai", config);
+    return;
+  }
+
+  if (runNowFlag) {
+    if (runUploadOnly) {
+      await runNow("upload", config);
+      return;
+    }
+    if (runAIOnly) {
+      await runNow("ai", config);
+      return;
+    }
+    await runNow("both", config);
+    return;
+  }
+
+  const shouldStartUpload = !runAIOnly;
+  const shouldStartAI = !runUploadOnly;
+
+  if (shouldStartUpload) {
+    validateUploadConfig(config);
+    startUploadScheduler(config);
+  }
+
+  if (shouldStartAI) {
+    if (hasAIConfig(config)) {
+      startAIScheduler(config);
+    } else if (isExplicitAIRequest(args)) {
+      throw new Error("缺少 Gemini 配置，无法启动 AI 分析任务");
+    } else {
+      console.warn("⚠️  未配置 Gemini，已跳过 AI 定时任务");
+    }
+  }
+
+  if (!shouldStartUpload && !shouldStartAI) {
+    console.log("没有可执行的任务，请检查参数");
+    return;
+  }
+
+  console.log("\n💡 常用命令：");
+  console.log("   node index.js --run-upload-now   # 立即执行上传");
+  console.log("   node index.js --run-ai-now       # 立即执行 AI 分析");
+  console.log("   node index.js --upload-only      # 仅启动上传定时任务");
+  console.log("   node index.js --ai-only          # 仅启动 AI 定时任务");
+  console.log("按 Ctrl+C 退出\n");
+}
+
 process.on("SIGINT", () => {
   console.log("\n👋 程序退出");
   process.exit(0);
 });
 
-main();
-
+main().catch((error) => {
+  console.error("❌ 启动失败:", error.message);
+  process.exit(1);
+});

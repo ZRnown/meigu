@@ -59,7 +59,7 @@ async function sendImagesToDiscord(webhookUrl, imagePaths, message = "") {
       const imageBuffer = fs.readFileSync(imagePath);
       formData.append(`files[${i}]`, imageBuffer, {
         filename: imagePath.split("/").pop(),
-        contentType: "image/png"
+        contentType: (imagePath.toLowerCase().endsWith(".jpg") || imagePath.toLowerCase().endsWith(".jpeg")) ? "image/jpeg" : "image/png"
       });
 
       console.log(`   图片${i + 1}: ${imagePath.split("/").pop()} (${(stats.size / 1024).toFixed(1)}KB)`);
